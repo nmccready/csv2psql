@@ -1,877 +1,144 @@
-[![Dependency Status](https://gemnasium.com/nmccready/csv2psql.svg)](https://gemnasium.com/nmccready/csv2psql)
-Master: [![Build Status](https://travis-ci.org/nmccready/csv2psql.png?branch=master)](https://travis-ci.org/nmccready/csv2psql)
+# csv2psql
 
-To try it out:
+[![Build Status](https://travis-ci.org/nmccready/csv2psql.png?branch=master)](https://travis-ci.org/nmccready/csv2psql)
+[![GitHub stars](https://img.shields.io/github/stars/nmccready/csv2psql.svg?style=social)](https://github.com/nmccready/csv2psql)
+
+**Convert CSV files to PostgreSQL tables with a single command.** Supports primary keys, unique indexes, data type overrides, merge operations, and more.
+
+## Install
+
+```bash
+python setup.py install
 ```
-  % python setup.py install
-  % csv2psql --schema=public --key=student_id,class_id example/enrolled.csv > enrolled.sql
-  % psql -f enrolled.sql
+
+## Quick Start
+
+```bash
+# Generate SQL from CSV
+csv2psql --schema=public --key=student_id,class_id example/enrolled.csv > enrolled.sql
+
+# Load into PostgreSQL
+psql -f enrolled.sql
+
+# Or pipe directly
+cat data.csv | csv2psql --schema=public --key=id | psql
+
+# Push to database immediately
+cat data.csv | csv2psql --now --postgres_url=postgresql://user:pass@localhost/mydb
+```
+
+## Usage
+
+```
+csv2psql [options] input.csv > output.sql
+cat input.csv | csv2psql [options] | psql
+cat input.csv | csv2psql --now [options]
 ```
 
 ## Options
 
-```
-Converts a CSV file into a PostgreSQL table.
+### Connection & Output
 
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
+| Option | Description |
+|--------|-------------|
+| `--now` | Pipe SQL directly to PostgreSQL |
+| `--postgres_url=URL` | PostgreSQL connection URL |
+| `--dumptype=TYPE` | Output format: `copy` (PSQL COPY) or `sql` (INSERT/UPDATE) |
 
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
+### Schema & Table
 
---postgres_url  url to send data to for postgres
+| Option | Description |
+|--------|-------------|
+| `--schema=NAME` | PostgreSQL schema name |
+| `--tablename=NAME` | Override table name (defaults to CSV filename) |
+| `--databasename=NAME` | Database name (required for merge operations) |
+| `--role=NAME` | Database role for the transaction |
 
---schema=name   use name as schema, and strip table name if needed
+### Keys & Indexes
 
---role=name     use name as role for database transaction
+| Option | Description |
+|--------|-------------|
+| `--key=a:b:c` | Create primary key on columns a, b, c |
+| `--unique=a:b:c` | Create unique index on columns a, b, c |
+| `--primaryfirst=BOOL` | Put primary key first (default: false) |
 
---key=a:b:c     create a primary key using columns named a, b, c.
+### Data Types & Columns
 
---unique=a:b:c  create a unique index using columns named a, b, c.
+| Option | Description |
+|--------|-------------|
+| `--datatype=NAME[,NAME]:TYPE` | Override data type for specified columns |
+| `--dates=KEY1,KEY2:FORMAT` | Specify date columns and their format |
+| `--serial=NAME` | Add auto-incrementing SERIAL column |
+| `--timestamp=NAME` | Add insertion timestamp column |
+| `--sniff=N` | Rows to scan for type detection (default: 1000) |
+| `--utf8` | Force UTF8 client encoding |
 
---append        skips table creation and truncation, inserts only
+### Table Operations
 
---cascade       drops tables with cascades
+| Option | Description |
+|--------|-------------|
+| `--append` | Skip table creation, insert only |
+| `--cascade` | Drop tables with CASCADE |
+| `--is_merge` | Create temp table for merge operations |
+| `--is_dump` | Use pg_dump for schema, then generate merge SQL |
+| `--new_table_name=NAME` | Rename table (use with `--is_dump`) |
+| `--delete_temp_table` | Delete temp table after merge |
 
---sniff=N       limit field type detection to N rows (default: 1000)
+### Advanced
 
---utf8          force client encoding to UTF8
+| Option | Description |
+|--------|-------------|
+| `--joinkeys=KEY1,KEY2:KEYNAME` | Combine columns into a joined key |
+| `--analyze_table=BOOL` | Run ANALYZE after import |
+| `--do_add_cols` | Add timestamp/serial columns on final run |
+| `--append_sql` | Read raw SQL from stdin |
+| `--modified_timestamp=NAME` | Override modified_time column name |
+| `--skipp_stored_proc_modified_time` | Skip stored proc (default: false) |
 
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
+### Environment Variables
 
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
+| Variable | Description |
+|----------|-------------|
+| `CSV2PSQL_SCHEMA` | Default value for `--schema` |
+| `CSV2PSQL_ROLE` | Default value for `--role` |
 
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
+## Examples
 
---tablename     tablename to override using the *.csv filename
+### Basic import
 
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
-- skipp_stored_proc_modified_time  (defaults to False)
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
-- skipp_stored_proc_modified_time  (defaults to False)
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
+```bash
+csv2psql --schema=public --key=id data.csv > import.sql
+psql -f import.sql
 ```
 
-```
-Converts a CSV file into a PostgreSQL table.
+### Merge data into existing table
 
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
-- skipp_stored_proc_modified_time  (defaults to False)
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
+```bash
+csv2psql --schema=public --key=id --is_merge --databasename=mydb \
+  --is_dump --delete_temp_table data.csv > merge.sql
+psql -f merge.sql
 ```
 
-```
-Converts a CSV file into a PostgreSQL table.
+### Custom data types
 
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
-- skipp_stored_proc_modified_time  (defaults to False)
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
+```bash
+csv2psql --datatype=price:numeric --datatype=name:varchar \
+  --dates=created_at,updated_at:%Y-%m-%d data.csv > output.sql
 ```
 
-```
-Converts a CSV file into a PostgreSQL table.
+## Contributing
 
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
+Contributions are welcome! Please open an issue or submit a pull request.
 
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
+1. Fork the repo
+2. Create your feature branch
+3. Commit your changes
+4. Open a Pull Request
 
---postgres_url  url to send data to for postgres
+## Sponsor
 
---schema=name   use name as schema, and strip table name if needed
+If you find this project useful, consider [sponsoring @nmccready](https://github.com/sponsors/nmccready) to support ongoing maintenance and development. ❤️
 
---role=name     use name as role for database transaction
+## License
 
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
-- skipp_stored_proc_modified_time  (defaults to False)
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
-
-```
-Converts a CSV file into a PostgreSQL table.
-
-Usage:
-    - cat input.csv | csv2psql [options] | psql
-    - cat input.csv | csv2psql [--now *options]
-
-options include:
---now           pipe the sql into the postgres driver and push to sql immediately
-
---postgres_url  url to send data to for postgres
-
---schema=name   use name as schema, and strip table name if needed
-
---role=name     use name as role for database transaction
-
---key=a:b:c     create a primary key using columns named a, b, c.
-
---unique=a:b:c  create a unique index using columns named a, b, c.
-
---append        skips table creation and truncation, inserts only
-
---cascade       drops tables with cascades
-
---sniff=N       limit field type detection to N rows (default: 1000)
-
---utf8          force client encoding to UTF8
-
---datatype=name[,name]:type
-                sets the data type for field NAME to TYPE
---dumptype=type use type copy or sql (COPY is PSQL COPY, SQL is PURE INSERT/UPDATES)
-
---joinkeys= keys[key1,key2]:keyname
-                Array of column name delimited by commas : to new key_name
-
---dates=[keys1,key2]:format
-        comma delimited list of keys with a date format
-
---tablename     tablename to override using the *.csv filename
-
---databasename  databasename is required upon is_merge
-
---is_merge indicated to create a table with temp_ in front of the table name
-
---is_dump  uses pg_dump to possibly get a temp table's
-           schema (as long as --key exists && --append is not present).
-           Lastly merging sql code is generated to merge a table with its temp_table.
-
---serial=name add a column that self generates itself an id of type SERIAl
-
---timestamp=name add a column of timestamp which will give a time when the data was inserted
-
---primaryfirst=bool defaults to false
-
---analyze_table=bool
-
---do_add_cols - indicator to add modified_time, and other cols (timestamp,serial) . To delay till last run
-
---append_sql Indicates that stdin is reading in text to send straight to post gres
-
---new_table_name=text Expected to be used with --dump , change old tablename to new_table_name
-
---skipp_stored_proc_modified_time  (defaults to False)
-
---modified_timestamp=String allows your to override the modified_time column name
-
--delete_temp_table Defaults False
-
-environment variables:
-CSV2PSQL_SCHEMA      default value for --schema
-CSV2PSQL_ROLE        default value for --role
-```
+See [LICENSE](./LICENSE) for details.
